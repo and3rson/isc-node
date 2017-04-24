@@ -1,0 +1,28 @@
+{
+  "name": "isclib",
+  "version": "1.0.0",
+  "description": "Inter-service communication layer for NodeJS",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "isc",
+    "rpc",
+    "python",
+    "node",
+    "messaging",
+    "pubsub"
+  ],
+  "author": "Andrew Dunai",
+  "license": "MIT",
+  "dependencies": {
+    "amqp": "^0.2.6",
+    "uuid": "^3.0.1",
+    "winston-color": "^1.0.0"
+  },
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "mocha": "^3.3.0"
+  }
+}
