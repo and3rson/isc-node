@@ -1,6 +1,26 @@
 const chai = require('chai');
 const expect = chai.expect;
-const client = require('.').createClient();
+const client = require('.').createClient({
+    services: {
+        dummy: {
+            ping: () => {
+                return 'pong';
+            }
+        },
+        proxy: {
+            get_info: () => {
+                return new Promise((resolve, reject) => {
+                    resolve({info: 'Some info'});
+                });
+            },
+            dangerous_operation: () => {
+                return new Promise((resolve, reject) => {
+                    reject('OOPS!');
+                });
+            }
+        }
+    }
+});
 
 chai.should();
 
@@ -53,7 +73,7 @@ chai.should();
 //     }, 2000);
 // }, 2000);
 
-var send = (close) => {
+const send = (close) => {
     if (close) {
         client.break();
     }
