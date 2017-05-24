@@ -4,10 +4,14 @@ const client = require('.').createClient();
 
 chai.should();
 
-for(let i = 0; i < 100; i++) {
-    client.invoke('proxy', 'get_info').then((response) => {
+const send = () => {
+    return client.invoke('proxy', 'get_info').then((response) => {
         console.log('Got response:', response);
     }).catch((e) => {
         console.error('Client error:', e);
     });
-}
+};
+
+// Promise.all(Array.from(new Array(10)).map(() => send()));
+
+send();

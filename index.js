@@ -7,7 +7,7 @@ const winston = require('winston-color');
 // TODO:
 // Fanout
 // Codecs
-
+// Timers
 
 class Client extends EventEmitter {
     constructor(options) {
@@ -15,7 +15,7 @@ class Client extends EventEmitter {
 
         options = options || {};
         options.exchange = options.exchange || 'isc';
-        options.url = options.reconnect || 'amqp://guest:guest@127.0.0.1:5672';
+        options.url = options.url || 'amqp://guest:guest@127.0.0.1:5672';
         options.reconnect = options.reconnect || true;
         options.invokeTimeout = options.invokeTimeout || 20000;
         options.services = options.services || {};
@@ -32,10 +32,6 @@ class Client extends EventEmitter {
         this.futures = {};
 
         this.channel = null;
-
-        // this.conn = null;
-        // this.exchange = null;
-        // this.queue = null;
     }
 
     start() {
@@ -62,22 +58,36 @@ class Client extends EventEmitter {
                     }
                 });
 
-                return channel.assertExchange(this.options.exchange, 'direct', {durable: false, autoDelete: false})
+                return channel.assertExchange(this.options.exchange, 'direct', {
+                    durable: false,
+                    autoDelete: false
+                })
                     .then(ok => {
                         this.logger.debug('Declared exchange %s', ok.exchange);
-                        return this.createQueue(channel, this._responseQueueName, true, false, false, this.onResponse.bind(this));
-                        // return channel.assertQueue(this._responseQueueName, {exclusive: true});
-                    })
-                    // .then(() => {
-                    //     channel.consume(this._responseQueueName, this.onMessage, {noAck: false});
-                    // })
-                    .then(() => {
-                        return Promise.all(
-                            Object.keys(this.options.services).map(serviceName => {
-                                // let serviceValue = this.options.services(serviceName);
-                                return this.createQueue(channel, [this.options.exchange, 'service', serviceName].join('_'), false, false, false, this.onRequest.bind(this));
-                            })
+                        return this.createQueue(
+                            channel,
+                            this._responseQueueName,
+                            true,
+                            false,
+                            false,
+                            this.onResponse.bind(this)
                         );
+                    })
+                    .then(() => {
+                        let sequence = Promise.resolve();
+                        Object.keys(this.options.services).forEach(serviceName => {
+                            sequence = sequence.then(() => {
+                                return this.createQueue(
+                                    channel,
+                                    [this.options.exchange, 'service', serviceName].join('_'),
+                                    false,
+                                    false,
+                                    false,
+                                    this.onRequest.bind(this)
+                                );
+                            });
+                        });
+                        return sequence;
                     })
                 ;
             })
@@ -92,20 +102,6 @@ class Client extends EventEmitter {
                 this.channel.emit('close');
             })
         ;
-        // this.conn = amqp.createConnection({
-        //     url: this.options.url,
-        //     reconnect: true
-        // }, {
-        //     defaultExchangeName: this.options.exchange
-        // });
-        // this.conn.on('error', (e) => {
-        //     winston.error('Connection error: %s', e.message);
-        // });
-        // this.conn.on('close', (e) => {
-        //     winston.warn('Disconnected');
-        //     this.isReady = false;
-        // });
-        // this.conn.on('ready', this.onConnectionReady.bind(this));
     }
 
     createQueue(channel, name, exclusive, durable, noAck, onConsume) {
@@ -121,50 +117,6 @@ class Client extends EventEmitter {
         ;
     }
 
-    // onConnectionReady() {
-    //     winston.info('Connection ready');
-
-    //     this.exchange = this.conn.exchange(
-    //         this.options.exchange,
-    //         {
-    //             type: 'direct',
-    //             durable: false,
-    //             autoDelete: false
-    //         },
-    //         this.onExchangeReady.bind(this)
-    //     );
-    // }
-
-    // onExchangeReady() {
-    //     winston.info('Exchange ready');
-
-    //     this._responseQueueName = 'isc-node-response-' + uuid.v4();
-
-    //     this.queue = this.conn.queue(
-    //         this._responseQueueName,
-    //         {
-    //             exclusive: true
-    //         },
-    //         this.onQueueReady.bind(this)
-    //     );
-    // }
-
-    // onQueueReady() {
-    //     winston.info('Queue ready, name = %s', this._responseQueueName);
-    //     this.queue.bind(
-    //         this.options.exchange,
-    //         this._responseQueueName,
-    //         this.onQueueBound.bind(this)
-    //     );
-    // }
-
-    // onQueueBound() {
-    //     winston.info('Queue bound');
-    //     this.queue.subscribe(this.onMessage.bind(this));
-    //     this.isReady = true;
-    //     this.emit('ready');
-    // }
-
     break() {
         this.conn.disconnect();
         this.isReady = false;
@@ -178,10 +130,6 @@ class Client extends EventEmitter {
     onRequest(message) {
         this.logger.debug('Got invocation ...%s', message.properties.correlationId.substr(-4));
         const infix = '_service_';
-        // message.fields.exchange;
-        // message.properties.replyTo;
-        // message.properties.replyTo;
-        // message.properties.contentType;
 
         const serviceName = message.fields.routingKey.substr(
             message.fields.exchange.length + infix.length
@@ -192,8 +140,6 @@ class Client extends EventEmitter {
             this.logger.warn('Warning: got call to unknown service - %s', serviceName);
             return;
         }
-
-        // new Promise((resolve, reject));
 
         const body = JSON.parse(message.content);
         if (body.length != 3) {
@@ -239,8 +185,7 @@ class Client extends EventEmitter {
     }
 
     onResponse(message) {
-        // console.log(message);
-        // console.log(headers);
+        this.logger.debug('Got response for invocation ...%s', message.properties.correlationId.substr(-4));
         const future = this.futures[message.properties.correlationId];
         if (future) {
             this.logger.debug('Resolving future');
@@ -291,9 +236,11 @@ class Client extends EventEmitter {
             args = args || [];
             kwargs = kwargs || {};
 
-            this.logger.info('Invoking %s.%s(*%s, **%s)', service, method, JSON.stringify(args), JSON.stringify(kwargs));
+            this.logger.info('Publishing invocation %s.%s(*%s, **%s) with id ...%s', service, method, JSON.stringify(args), JSON.stringify(kwargs), correlationId.substr(-4));
 
             // TODO: Codecs
+
+            console.log(`${this.options.exchange}_service_${service}`);
 
             const result = this.channel.publish(
                 this.options.exchange,
@@ -312,7 +259,7 @@ class Client extends EventEmitter {
                     exchange: this.options.exchange
                 }
             );
-            // console.log(result);
+
             if (!result) {
                 this.logger.error('Failed to publish message, will retry later: publish returned "false".');
                 setTimeout(
@@ -323,8 +270,6 @@ class Client extends EventEmitter {
         }
 
         return promise;
-
-        // TODO: Retry if publishing failed
     }
 
     deregisterFuture(correlationId) {

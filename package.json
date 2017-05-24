@@ -1,10 +1,10 @@
 {
   "name": "isclib",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Inter-service communication layer for NodeJS",
   "main": "index.js",
   "scripts": {
-    "test": "node test.js"
+    "test": "./node_modules/mocha/bin/mocha test.js"
   },
   "keywords": [
     "isc",

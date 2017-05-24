@@ -1,90 +1,63 @@
 const chai = require('chai');
 const expect = chai.expect;
-const client = require('.').createClient({
-    services: {
-        dummy: {
-            ping: () => {
-                return 'pong';
-            }
-        },
-        proxy: {
-            get_info: () => {
-                return new Promise((resolve, reject) => {
-                    resolve({info: 'Some info'});
-                });
-            },
-            dangerous_operation: () => {
-                return new Promise((resolve, reject) => {
-                    reject('OOPS!');
-                });
-            }
-        }
-    }
-});
+const isc = require('.');
 
 chai.should();
 
-// describe('Client tests', () => {
-//     it('should work', () => {
-//         return client.invoke('mailer', 'ping').then((result) => {
-//             expect(result).to.equal('pong');
-//         });
-//         // promises = [];
-//         // for (var i = 0; i < 10; i++) {
-//         //     promises.push(client.invoke('mailer', 'ping').then((result) => {
-//         //         console.log('Result:', result)
-//         //     }));
-//         // }
-
-//         // Promise.all(promises).then(() => {
-//         //     client.stop();
-//         // });
-//     });
-//     it('should handle timeouts', () => {
-//         return client.invoke('unexisting-service', 'unexisting-method').then((resut) => {
-//             console.log(result);
-//         });
-//     });
-// });
-
-// return client.invoke('mailer', 'ping').then((result) => {
-//     console.log('Yes:', result);
-//     // expect(result).to.equal('pong');
-//     client.stop();
-
-//     setTimeout(() => {
-//         client.invoke('mailer', 'ping').then((result) => {
-//             console.log('Yes 2:', result);
-//         })
-//     }, 1000);
-// });
-
-// setTimeout(() => {
-//     client.stop();
-
-//     setTimeout(() => {
-//         client.stop();
-
-//         setTimeout(() => {
-//             client.invoke('mailer', 'ping').then((result) => {
-//                 console.log('Result:', result);
-//             })
-//         }, 500);
-//     }, 2000);
-// }, 2000);
-
-const send = (close) => {
-    if (close) {
-        client.break();
-    }
-    client.invoke('mailer', 'ping').then((response) => {
-        console.log('Got response:', response);
-
-        setTimeout(() => {
-            send();
-        }, 1000);
-    }).catch((e) => {
-        console.error('Client error:', e);
+const createClient = () => {
+    return isc.createClient({
+        exchange: 'isc-node-test',
+        invokeTimeout: 1000,
+        services: {
+            dummy: {
+                ping: () => {
+                    return 'pong';
+                }
+            },
+            calculator: {
+                add: (a, b) => {
+                    return {value: a + b};
+                },
+                div: (a, b) => {
+                    return new Promise((resolve, reject) => {
+                        if (b != 0) {
+                            resolve({value: a / b});
+                        } else {
+                            reject('Division by zero!');
+                        }
+                    });
+                },
+                slowMethod: () => {
+                    return new Promise((resolve, reject) => {
+                        setTimeout(() => resolve(42), 1500);
+                    });
+                }
+            }
+        }
     });
 };
-send();
+
+describe('Client tests', () => {
+    const client = createClient();
+    it('should send & receive simple invocation requests', () => {
+        return client.invoke('dummy', 'ping').then((result) => {
+            expect(result).to.equal('pong');
+        });
+    });
+    it('should handle arguments', () => {
+        return client.invoke('calculator', 'add', [1, 2]).then((result) => {
+            expect(result.value).to.equal(3);
+        });
+    });
+    it('should handle errors', () => {
+        return client.invoke('calculator', 'div', [1, 0]).catch((result) => {
+            expect(result).to.equal('Division by zero!');
+        });
+    });
+    it('should handle timeouts', () => {
+        return client.invoke('calculator', 'slowMethod').catch((result) => {
+            expect(result).to.be.an('error');
+            expect(result.message).to.equal('ISC request timed out after 1000ms.');
+        });
+    });
+});
