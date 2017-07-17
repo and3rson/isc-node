@@ -69,8 +69,9 @@ class Client extends EventEmitter {
                             this._responseQueueName,
                             true,
                             false,
-                            false,
-                            this.onResponse.bind(this)
+                            true,
+                            this.onResponse.bind(this),
+                            true
                         );
                     })
                     .then(() => {
@@ -83,7 +84,8 @@ class Client extends EventEmitter {
                                     false,
                                     false,
                                     false,
-                                    this.onRequest.bind(this)
+                                    this.onRequest.bind(this),
+                                    false
                                 );
                             });
                         });
@@ -104,8 +106,8 @@ class Client extends EventEmitter {
         ;
     }
 
-    createQueue(channel, name, exclusive, durable, noAck, onConsume) {
-        return channel.assertQueue(name, {exclusive: exclusive, durable: durable})
+    createQueue(channel, name, exclusive, durable, noAck, onConsume, autoDelete) {
+        return channel.assertQueue(name, {exclusive: exclusive, durable: durable, autoDelete: autoDelete})
             .then(qok => {
                 this.logger.debug('Declared queue %s', qok.queue);
                 return channel.bindQueue(qok.queue, this.options.exchange, qok.queue);

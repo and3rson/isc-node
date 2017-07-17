@@ -1,6 +1,6 @@
 {
   "name": "isclib",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Inter-service communication layer for NodeJS",
   "main": "index.js",
   "scripts": {
