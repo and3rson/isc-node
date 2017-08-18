@@ -302,6 +302,14 @@ const methodProxyHandler = {
         console.log('methodProxyHandler.get not implemented yet');
     },
     apply: function(target, thisArg, argumentsList) {
+        argumentsList = argumentsList.slice(0, 2);
+        const [args, kwArgs] = argumentsList;
+        if (typeof args !== undefined && !(args instanceof Array)) {
+            throw new Error('Argument 1 of ISC method invocation must always be an Array.');
+        }
+        if (typeof kwArgs !== undefined && (kwArgs instanceof Array)) {
+            throw new Error('Argument 2 of ISC method invocation must always be an Object.');
+        }
         const [client, service, method] = target.meta;
         return client.invoke.apply(client, [service, method].concat(argumentsList));
     }
