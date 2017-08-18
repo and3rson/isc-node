@@ -49,6 +49,11 @@ describe('Client tests', () => {
             expect(result.value).to.equal(3);
         });
     });
+    it('should handle proxy-style call', () => {
+        return client.calculator.add([1, 2]).then((result) => {
+            expect(result.value).to.equal(3);
+        });
+    });
     it('should handle errors', () => {
         return client.invoke('calculator', 'div', [1, 0]).catch((result) => {
             expect(result).to.equal('Division by zero!');
@@ -61,3 +66,4 @@ describe('Client tests', () => {
         });
     });
 });
+

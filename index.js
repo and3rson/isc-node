@@ -154,7 +154,6 @@ class Client extends EventEmitter {
             this.logger.error('Error: NodeJS cannot handle "kwargs". Please pass only "args".');
             return;
         }
-        // console.log('Request body:', body);
         const method = service[methodName];
         if (!method) {
             this.logger.error('Error: No such method: "%s"."%s"', serviceName, methodName);
@@ -242,8 +241,6 @@ class Client extends EventEmitter {
 
             // TODO: Codecs
 
-            console.log(`${this.options.exchange}_service_${service}`);
-
             const result = this.channel.publish(
                 this.options.exchange,
                 `${this.options.exchange}_service_${service}`,
@@ -282,9 +279,39 @@ class Client extends EventEmitter {
     }
 }
 
+const clientProxyHandler = {
+    get: function(target, prop) {
+        if(prop in target) {
+            return target[prop];
+        }
+        return new Proxy([target, prop], serviceProxyHandler);
+    }
+};
+
+const serviceProxyHandler = {
+    get: function(target, prop) {
+        const [client, service] = target;
+        const fn = function() {};
+        fn.meta = [client, service, prop];
+        return new Proxy(fn, methodProxyHandler);
+    }
+};
+
+const methodProxyHandler = {
+    get: function() {
+        console.log('methodProxyHandler.get not implemented yet');
+    },
+    apply: function(target, thisArg, argumentsList) {
+        const [client, service, method] = target.meta;
+        return client.invoke.apply(client, [service, method].concat(argumentsList));
+    }
+};
+
 exports.Client = Client;
 exports.createClient = (options) => {
     const client = new Client(options);
     client.start();
-    return client;
+    const clientProxy = new Proxy(client, clientProxyHandler);
+    return clientProxy;
 };
+
