@@ -67,7 +67,10 @@ class Client extends EventEmitter {
                 })
                     .then(ok => {
                         this.logger.debug('Declared exchange %s', ok.exchange);
-                        return channel.assertExchange(this.options.fanoutExchange, 'fanout', {});
+                        return channel.assertExchange(this.options.fanoutExchange, 'fanout', {
+                            durable: false,
+                            autoDelete: false
+                        });
                     })
                     .then(ok => {
                         this.logger.debug('Declared fanout exchange %s', ok.exchange);
