@@ -51,7 +51,7 @@ class Client extends EventEmitter {
                 channel.on('error', error => {
                     this.logger.info('Error on channel: %s', error);
                 });
-                channel.on('close', () => {
+                channel.once('close', () => {
                     this.isReady = false;
                     if (this.options.reconnect) {
                         this.logger.info('Connection closed, will try to reconnect in 3 seconds.');
