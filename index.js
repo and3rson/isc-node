@@ -15,10 +15,12 @@ class Client extends EventEmitter {
 
         options = options || {};
         options.exchange = options.exchange || 'isc';
+        options.fanoutExchange = options.fanoutExchange || `${options.exchange}_fanout`;
         options.url = options.url || 'amqp://guest:guest@127.0.0.1:5672';
         options.reconnect = options.reconnect || true;
         options.invokeTimeout = options.invokeTimeout || 20000;
         options.services = options.services || {};
+        options.listeners = options.listeners || {};
         if (options.logger) {
             this.logger = options.logger;
         } else {
@@ -43,7 +45,8 @@ class Client extends EventEmitter {
             .then((channel) => {
                 this.logger.debug('Created channel');
                 this.channel = channel;
-                this._responseQueueName = 'isc-node-response-' + uuid.v4();
+                this._responseQueueName = this.options.exchange + '-node-response-' + uuid.v4();
+                this._fanoutQueueName = this.options.exchange + '-node-fanout-' + uuid.v4();
 
                 channel.on('error', error => {
                     this.logger.info('Error on channel: %s', error);
@@ -64,9 +67,27 @@ class Client extends EventEmitter {
                 })
                     .then(ok => {
                         this.logger.debug('Declared exchange %s', ok.exchange);
+                        return channel.assertExchange(this.options.fanoutExchange, 'fanout', {});
+                    })
+                    .then(ok => {
+                        this.logger.debug('Declared fanout exchange %s', ok.exchange);
+                        return this.createQueue(
+                            channel,
+                            this._fanoutQueueName,
+                            this.options.fanoutExchange,
+                            true,
+                            false,
+                            true,
+                            this.onNotification.bind(this),
+                            true
+                        );
+                    })
+                    .then(ok => {
+                        this.logger.debug('Declared fanout queue');
                         return this.createQueue(
                             channel,
                             this._responseQueueName,
+                            this.options.exchange,
                             true,
                             false,
                             true,
@@ -81,11 +102,12 @@ class Client extends EventEmitter {
                                 return this.createQueue(
                                     channel,
                                     [this.options.exchange, 'service', serviceName].join('_'),
+                                    this.options.exchange,
                                     false,
                                     false,
                                     false,
                                     this.onRequest.bind(this),
-                                    false
+                                    true
                                 );
                             });
                         });
@@ -106,14 +128,14 @@ class Client extends EventEmitter {
         ;
     }
 
-    createQueue(channel, name, exclusive, durable, noAck, onConsume, autoDelete) {
+    createQueue(channel, name, exchange, exclusive, durable, noAck, onConsume, autoDelete) {
         return channel.assertQueue(name, {exclusive: exclusive, durable: durable, autoDelete: autoDelete})
             .then(qok => {
                 this.logger.debug('Declared queue %s', qok.queue);
-                return channel.bindQueue(qok.queue, this.options.exchange, qok.queue);
+                return channel.bindQueue(qok.queue, exchange, qok.queue);
             })
             .then(bok => {
-                this.logger.debug('Bound queue %s to exchange %s', name, this.options.exchange);
+                this.logger.debug('Bound queue %s to exchange %s', name, exchange);
                 return channel.consume(bok.queue, onConsume, {noAck: noAck});
             })
         ;
@@ -199,6 +221,16 @@ class Client extends EventEmitter {
             }
         } else {
             this.logger.warn('Warning: future with such correlationId not found!');
+        }
+    }
+
+    onNotification(message) {
+        const [event, data] = JSON.parse(message.content);
+        if (this.options.listeners[event]) {
+            this.logger.debug('Got notification ...%s, delegating to listener', message.properties.correlationId);
+            this.options.listeners[event](data);
+        } else {
+            this.logger.debug('Got notification ...%s but no matching listener found, ignoring', message.properties.correlationId);
         }
     }
 
